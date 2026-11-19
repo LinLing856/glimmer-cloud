@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="微光集">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
-  <script src="cloud-sync.js?v=4"></script>
+  <script src="cloud-sync.js?v=5"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -436,26 +436,13 @@ body{background:linear-gradient(165deg,var(--bg-1),var(--bg-2) 48%,var(--bg-3))}
         <button class="btn btn-ghost dropdown-item" id="btn-export"><span class="btn-icon" id="export-icon"></span>导出</button>
         <button class="btn btn-ghost dropdown-item" id="btn-import"><span class="btn-icon" id="import-icon"></span>导入</button>
         <button class="btn btn-ghost dropdown-item" id="btn-backup" title="备份与恢复（换机迁移）"><span class="btn-icon" id="backup-icon"></span>备份</button>
-        <button class="btn btn-ghost dropdown-item" id="btn-refresh" title="立即从云端刷新同步" onclick="refreshSync()"><span class="btn-icon">🔄</span>刷新同步</button>
-        <div class="dropdown-space">空间名：<span id="space-name-label"></span></div>
-        <button class="btn btn-ghost dropdown-item" id="btn-copy-space" title="复制空间名，去另一台设备切换为相同名字即可同步"><span class="btn-icon">📋</span>复制空间名</button>
-        <button class="btn btn-ghost dropdown-item" id="btn-switch-space" title="退出并切换空间（重新登录）" onclick="switchSpace()"><span class="btn-icon">🔄</span>切换空间</button>
+        <button class="btn btn-ghost dropdown-item" id="btn-refresh" title="连接云端并立即同步（未连接时会弹出 GitHub Token 配置）" onclick="refreshSync()"><span class="btn-icon">🔄</span>连接云端</button>
       </div>
     </div>
   </div>
 </header>
 <div class="tl-bar" id="tl-bar"></div>
 <main class="timeline-container"><div class="timeline" id="timeline"></div></main>
-<div class="modal-overlay" id="space-modal">
-  <div class="modal">
-    <h2 class="modal-title">设置同步空间</h2>
-    <p class="modal-desc">给这个空间起个名字（这是你的私人空间）。<b>手机 App 和网页填同一个名字，数据就能互通</b>；用不同名字即可数据隔离。可点「更多 ⋮ → 复制空间名」把名字带到另一台设备。<b>留空将自动生成随机空间名</b>（适合单设备使用）。</p>
-    <input type="text" id="space-input" class="form-input" placeholder="例如：我的微光集 / 小明的时间轴" maxlength="40" autocomplete="off">
-    <div class="form-actions">
-      <button type="button" class="btn btn-primary" id="space-ok">开始使用</button>
-    </div>
-  </div>
-</div>
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
     <div class="modal-header"><h2 class="modal-title" id="modal-title">捕捉微光</h2><button class="modal-close" id="modal-close"></button></div>
@@ -1725,14 +1712,6 @@ function updateSpaceLabel(){
   const el=document.getElementById('space-name-label');
   if(el){ try{ el.textContent=localStorage.getItem('lt_space_name_v2')||'(未设置)'; }catch(e){ el.textContent=''; } }
 }
-document.getElementById('btn-copy-space').addEventListener('click', async ()=>{
-  const name=getOwnerId();
-  let ok=false;
-  try{ await navigator.clipboard.writeText(name); ok=true; }catch(e){}
-  alert((ok?'已复制空间名：':'空间名（请手动记下）：')+name+'\n在另一台设备点「切换空间」并输入相同名字，即可互通数据。');
-  $moreDropdown.classList.remove('show');
-});
-updateSpaceLabel();
 document.addEventListener('click',(e)=>{
   if(!e.target.closest('.theme-selector'))$themeDropdown.classList.remove('show');
   if(!e.target.closest('#btn-more'))$moreDropdown.classList.remove('show');
@@ -1763,45 +1742,6 @@ function updateSyncStatus(state,text){
 }
 window.updateSyncStatus=updateSyncStatus;
 
-// 自定义空间名弹窗（不能用 window.prompt —— 安卓 WebView 不弹窗）
-// force=true 时即使已设置过也重新弹出（用于「切换空间」）
-function openSpaceModal(force){
-  return new Promise(resolve=>{
-    const cur=getOwnerId();
-    if(!force && cur){ resolve(cur); return; }
-    const modal=document.getElementById('space-modal');
-    const input=document.getElementById('space-input');
-    const ok=document.getElementById('space-ok');
-    if(!modal||!input){ const n='微光集-'+Math.random().toString(36).slice(2,7); try{localStorage.setItem('lt_space_name_v2',n);}catch(e){} resolve(n); return; }
-    input.value=cur||'';
-    modal.classList.add('active');
-    setTimeout(()=>{try{input.focus();}catch(e){}},50);
-    const finish=()=>{
-      const val=input.value;
-      let name;
-      if(val&&String(val).trim()){
-        name=String(val).trim().slice(0,40);
-      }else{
-        // 留空：生成随机空间名，保证每个人互不干扰（多端同步需填固定名字）
-        name='微光集-'+Math.random().toString(36).slice(2,7);
-      }
-      try{localStorage.setItem('lt_space_name_v2',name);}catch(e){}
-      modal.classList.remove('active');
-      const lbl=document.getElementById('space-name-label');
-      if(lbl)lbl.textContent=name;
-      resolve(name);
-    };
-    ok.onclick=finish;
-    input.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); finish(); } };
-  });
-}
-window.openSpaceModal=openSpaceModal;
-function ensureSpaceName(){ return openSpaceModal(false); }
-window.ensureSpaceName=ensureSpaceName;
-// 「切换空间」：弹出自定义弹窗改空间名后刷新（不用 window.confirm——安卓 WebView 不弹窗）
-function switchSpace(){ openSpaceModal(true).then(()=>{ location.reload(); }); }
-window.switchSpace=switchSpace;
-
 // ===== 初始化 =====
 async function init(){
   // 主题
@@ -1809,9 +1749,9 @@ async function init(){
   if(savedTheme&&THEMES[savedTheme])currentTheme=savedTheme;
   applyTheme(currentTheme);
   renderThemeDropdown();
-  // 数据（先确保空间名，再同步云端）
+  // 数据（新版云端隔离靠 GitHub Token，无需空间名弹窗；本地静默生成一个内部标识即可）
   if(typeof updateSyncStatus==='function')updateSyncStatus('syncing','同步中');
-  await ensureSpaceName();
+  try{ if(!localStorage.getItem('lt_space_name_v2')) localStorage.setItem('lt_space_name_v2','微光集-'+Math.random().toString(36).slice(2,7)); }catch(e){}
   await loadData();
   if(typeof updateSyncStatus==='function')updateSyncStatus('ok','已同步');
   // 粒子
@@ -1854,6 +1794,6 @@ init();
   });
 })();
 </script>
-<script src="app-lang.js?v=4"></script>
+<script src="app-lang.js?v=5"></script>
 </body>
 </html>

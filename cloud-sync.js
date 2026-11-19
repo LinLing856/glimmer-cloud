@@ -95,15 +95,11 @@
       const box = document.createElement('div');
       box.style.cssText = 'background:#fff;color:#222;border-radius:14px;padding:22px;max-width:340px;width:88%;font-family:inherit;box-shadow:0 12px 40px rgba(0,0,0,.3);';
       box.innerHTML =
-        '<div style="font-weight:700;font-size:17px;margin-bottom:6px;">⚙️ Connect Cloud / 连接云端</div>' +
-        '<div style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">' +
-        'Paste your GitHub Token（Settings → Developer settings → Personal access tokens → Tokens (classic)，勾选 repo 和 gist）' +
-        (needGistId ? '<br>换新设备请同时填第一次记下的 <b>Space ID</b>' : '') +
-        '</div>' +
+        '<div style="font-weight:700;font-size:17px;margin-bottom:6px;">⚙️ 连接云端 / Connect Cloud</div>' +
+        '<div style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">粘贴 GitHub Token，贴一次永久记住<br><b>Paste once, remembered forever.</b></div>' +
         '<input id="gh-token-input" placeholder="ghp_ 开头的 Token" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:10px;">' +
-        (needGistId ? '<input id="gh-gist-input" placeholder="Space ID（首次使用留空自动创建）" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:10px;">' : '') +
-        '<button id="gh-config-ok" style="width:100%;padding:11px;border:none;border-radius:8px;background:#4f6ef7;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Save & Connect</button>' +
-        '<div style="text-align:center;margin-top:8px;"><a id="gh-config-cancel" style="font-size:13px;color:#999;cursor:pointer;">Not now</a></div>';
+        '<button id="gh-config-ok" style="width:100%;padding:11px;border:none;border-radius:8px;background:#4f6ef7;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">连接 / Connect</button>' +
+        '<div style="text-align:center;margin-top:8px;"><a id="gh-config-cancel" style="font-size:13px;color:#999;cursor:pointer;">暂不 / Not now</a></div>';
       ov.appendChild(box);
       document.body.appendChild(ov);
       const ok = box.querySelector('#gh-config-ok');
