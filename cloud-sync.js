@@ -127,11 +127,39 @@
     });
   }
 
-  // ===== Gist ID：本地没有则自动创建 =====
+  // ===== 发现已有数据空间（多设备共用同一 Token 时自动复用，不再各建各的） =====
+  async function discoverGist() {
+    try {
+      const res = await fetch(GH_API + '/gists?per_page=100', { headers: ghHeaders() });
+      if (!res.ok) return null;
+      const list = await res.json();
+      const cands = [];
+      for (const g of (Array.isArray(list) ? list : [])) {
+        const f = g.files && g.files[DATA_FILE];
+        if (!f || !f.content) continue;
+        try {
+          const d = JSON.parse(f.content);
+          cands.push({ id: g.id, savedAt: d.savedAt || 0, count: (d.events || []).length });
+        } catch (e) {}
+      }
+      if (!cands.length) return null;
+      // 取事件最多（其次最新）的那个作为数据主空间
+      cands.sort((a, b) => (b.count - a.count) || (b.savedAt - a.savedAt));
+      return cands[0].id;
+    } catch (e) { return null; }
+  }
+
+  // ===== Gist ID：先发现已有空间，没有才新建 =====
   async function getGistId() {
     let gid = null;
     try { gid = localStorage.getItem(GIST_KEY); } catch (e) {}
     if (gid) return gid;
+    gid = await discoverGist();
+    if (gid) {
+      try { localStorage.setItem(GIST_KEY, gid); } catch (e) {}
+      if (typeof showToast === 'function') showToast('已接入现有云端空间，开始合并数据…');
+      return gid;
+    }
     const res = await fetch(GH_API + '/gists', {
       method: 'POST',
       headers: ghHeaders(),
@@ -148,6 +176,7 @@
     if (typeof showToast === 'function') showToast('已创建云端空间，ID: ' + data.id + '（换设备要填它）');
     return data.id;
   }
+
 
   // ===== 读云端 =====
   async function pullCloud() {
@@ -226,8 +255,7 @@
     }
     setStatus('syncing', '同步中…');
     try {
-      await pushCloud();          // 1) 先推本地变更（含墓碑删除）
-      const remote = await pullCloud();  // 2) 拉云端
+      const remote = await pullCloud();  // 1) 先拉云端（避免用本地旧数据覆盖云端）
       if (remote) {
         const mergedEvents = mergeRecords(events, remote.events);
         const mergedTimelines = mergeRecords(timelines, remote.timelines);
@@ -256,9 +284,9 @@
           currentTimelineId = timelines[0].id;
         }
         if (typeof saveLocalOnly === 'function') saveLocalOnly();  // 3) 存本地（不触发 push）
-        await pushCloud();                                          // 4) 推合并结果
         console.log('[cloud] 已同步 ' + events.length + ' 条事件, ' + timelines.length + ' 条时间线');
       }
+      await pushCloud();  // 4) 推合并结果（云端为空时也把本地数据推上去）
       setStatus('ok', '已同步');
     } catch (e) {
       console.warn('[cloud] syncFromCloud 失败：', e && e.message ? e.message : e);
