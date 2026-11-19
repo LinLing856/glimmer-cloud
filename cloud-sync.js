@@ -94,12 +94,19 @@
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;';
       const box = document.createElement('div');
       box.style.cssText = 'background:#fff;color:#222;border-radius:14px;padding:22px;max-width:340px;width:88%;font-family:inherit;box-shadow:0 12px 40px rgba(0,0,0,.3);';
+      // 文案跟随界面语言（lt_lang_v1 由 app-lang.js 维护，默认中文）
+      let uiLang = 'zh';
+      try { uiLang = localStorage.getItem('lt_lang_v1') || 'zh'; } catch (e) {}
+      const en = uiLang === 'en';
+      const T = en
+        ? { title: '⚙️ Connect Cloud', desc: 'Paste your GitHub Token — saved on this device, asked only once.', ph: 'Token starting with ghp_', ok: 'Connect', cancel: 'Not now' }
+        : { title: '⚙️ 连接云端', desc: '粘贴 GitHub Token，贴一次永久记住', ph: 'ghp_ 开头的 Token', ok: '连接', cancel: '暂不' };
       box.innerHTML =
-        '<div style="font-weight:700;font-size:17px;margin-bottom:6px;">⚙️ 连接云端 / Connect Cloud</div>' +
-        '<div style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">粘贴 GitHub Token，贴一次永久记住<br><b>Paste once, remembered forever.</b></div>' +
-        '<input id="gh-token-input" placeholder="ghp_ 开头的 Token" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:10px;">' +
-        '<button id="gh-config-ok" style="width:100%;padding:11px;border:none;border-radius:8px;background:#4f6ef7;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">连接 / Connect</button>' +
-        '<div style="text-align:center;margin-top:8px;"><a id="gh-config-cancel" style="font-size:13px;color:#999;cursor:pointer;">暂不 / Not now</a></div>';
+        '<div style="font-weight:700;font-size:17px;margin-bottom:6px;">' + T.title + '</div>' +
+        '<div style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">' + T.desc + '</div>' +
+        '<input id="gh-token-input" placeholder="' + T.ph + '" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:10px;">' +
+        '<button id="gh-config-ok" style="width:100%;padding:11px;border:none;border-radius:8px;background:#4f6ef7;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">' + T.ok + '</button>' +
+        '<div style="text-align:center;margin-top:8px;"><a id="gh-config-cancel" style="font-size:13px;color:#999;cursor:pointer;">' + T.cancel + '</a></div>';
       ov.appendChild(box);
       document.body.appendChild(ov);
       const ok = box.querySelector('#gh-config-ok');
