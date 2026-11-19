@@ -128,20 +128,29 @@
   }
 
   // ===== 发现已有数据空间（多设备共用同一 Token 时自动复用，不再各建各的） =====
+  // 注意：GitHub 列表接口的 files 不含 content（只有 raw_url），v9 起改用 raw_url 读内容
   async function discoverGist() {
     try {
       const res = await fetch(GH_API + '/gists?per_page=100', { headers: ghHeaders() });
       if (!res.ok) return null;
       const list = await res.json();
       const cands = [];
-      for (const g of (Array.isArray(list) ? list : [])) {
+      await Promise.all((Array.isArray(list) ? list : []).map(async g => {
         const f = g.files && g.files[DATA_FILE];
-        if (!f || !f.content) continue;
+        if (!f) return;
         try {
-          const d = JSON.parse(f.content);
+          let txt = null;
+          if (typeof f.content === 'string' && f.content) {
+            txt = f.content;
+          } else if (f.raw_url) {
+            const rr = await fetch(f.raw_url);  // raw 地址自带公开访问凭证，无需鉴权
+            if (rr.ok) txt = await rr.text();
+          }
+          if (!txt) return;
+          const d = JSON.parse(txt);
           cands.push({ id: g.id, savedAt: d.savedAt || 0, count: (d.events || []).length });
         } catch (e) {}
-      }
+      }));
       if (!cands.length) return null;
       // 取事件最多（其次最新）的那个作为数据主空间
       cands.sort((a, b) => (b.count - a.count) || (b.savedAt - a.savedAt));
