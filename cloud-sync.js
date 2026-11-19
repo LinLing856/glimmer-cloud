@@ -149,17 +149,25 @@
     } catch (e) { return null; }
   }
 
-  // ===== Gist ID：先发现已有空间，没有才新建 =====
+  // ===== Gist ID：每次会话都先向 GitHub 确认共用空间（v8 关键修复） =====
+  // 旧版逻辑「本地存过 ID 就直接用」导致早期各设备各建各的 Gist，永远无法互通。
+  // 现在每次会话启动时都会列出 Token 名下的全部 Gist，自动认领事件最多的那个；
+  // 只有 Token 名下确实没有任何数据 Gist 时，才沿用本地记录或新建。
+  let _gistResolved = null;
   async function getGistId() {
-    let gid = null;
-    try { gid = localStorage.getItem(GIST_KEY); } catch (e) {}
-    if (gid) return gid;
-    gid = await discoverGist();
-    if (gid) {
-      try { localStorage.setItem(GIST_KEY, gid); } catch (e) {}
-      if (typeof showToast === 'function') showToast('已接入现有云端空间，开始合并数据…');
-      return gid;
+    if (_gistResolved) return _gistResolved;
+    let stored = null;
+    try { stored = localStorage.getItem(GIST_KEY); } catch (e) {}
+    const found = await discoverGist();
+    if (found) {
+      if (found !== stored) {
+        try { localStorage.setItem(GIST_KEY, found); } catch (e) {}
+        if (typeof showToast === 'function') showToast('已接入现有云端空间，开始合并数据…');
+      }
+      _gistResolved = found;
+      return found;
     }
+    if (stored) { _gistResolved = stored; return stored; }
     const res = await fetch(GH_API + '/gists', {
       method: 'POST',
       headers: ghHeaders(),
@@ -172,6 +180,7 @@
     if (!res.ok) throw new Error('创建数据空间失败：HTTP ' + res.status);
     const data = await res.json();
     try { localStorage.setItem(GIST_KEY, data.id); } catch (e) {}
+    _gistResolved = data.id;
     // 提醒用户记下 Space ID（换设备用）
     if (typeof showToast === 'function') showToast('已创建云端空间，ID: ' + data.id + '（换设备要填它）');
     return data.id;
@@ -190,31 +199,35 @@
 
   // ===== 写云端（合并结果整体回写） =====
   let _syncing = false;
+  let _queued = false;
   async function pushCloud() {
-    if (_syncing) return;
+    if (_syncing) { _queued = true; return; }  // 同步中触发的推送排队补跑，不再静默丢弃
     if (!localStorage.getItem(TOKEN_KEY)) return;
     _syncing = true;
     setStatus('syncing', '同步中…');
     try {
-      const now = Date.now();
-      for (const e of (events || [])) { if (!e.updatedAt || e.updatedAt < now - 86400000) e.updatedAt = now; }
-      for (const t of (timelines || [])) { if (!t.updatedAt || t.updatedAt < now - 86400000) t.updatedAt = now; }
-      for (const e of (events || [])) unmarkDeleted(e.id);
-      for (const t of (timelines || [])) unmarkDeleted(t.id);
-      const gid = await getGistId();
-      await ghFetch(GH_API + '/gists/' + gid, {
-        method: 'PATCH',
-        headers: ghHeaders(),
-        body: JSON.stringify({
-          files: { [DATA_FILE]: { content: JSON.stringify({
-            events: events || [],
-            timelines: timelines || [],
-            currentTimelineId: currentTimelineId || null,
-            deletedIds: getDeletedIds(),
-            savedAt: now
-          }) } }
-        })
-      });
+      do {
+        _queued = false;
+        const now = Date.now();
+        for (const e of (events || [])) { if (!e.updatedAt || e.updatedAt < now - 86400000) e.updatedAt = now; }
+        for (const t of (timelines || [])) { if (!t.updatedAt || t.updatedAt < now - 86400000) t.updatedAt = now; }
+        for (const e of (events || [])) unmarkDeleted(e.id);
+        for (const t of (timelines || [])) unmarkDeleted(t.id);
+        const gid = await getGistId();
+        await ghFetch(GH_API + '/gists/' + gid, {
+          method: 'PATCH',
+          headers: ghHeaders(),
+          body: JSON.stringify({
+            files: { [DATA_FILE]: { content: JSON.stringify({
+              events: events || [],
+              timelines: timelines || [],
+              currentTimelineId: currentTimelineId || null,
+              deletedIds: getDeletedIds(),
+              savedAt: now
+            }) } }
+          })
+        });
+      } while (_queued);
       setStatus('ok', '已同步');
     } catch (e) {
       console.warn('[cloud] 上传失败：', e && e.message ? e.message : e);
@@ -257,6 +270,16 @@
     try {
       const remote = await pullCloud();  // 1) 先拉云端（避免用本地旧数据覆盖云端）
       if (remote) {
+        // 先合并云端墓碑（v8：跨设备删除不再复活）
+        if (remote.deletedIds && typeof remote.deletedIds === 'object') {
+          const mine = getDeletedIds();
+          let changed = false;
+          for (const id in remote.deletedIds) {
+            const ts = remote.deletedIds[id];
+            if (!mine[id] || mine[id] < ts) { mine[id] = ts; changed = true; }
+          }
+          if (changed) setDeletedIds(mine);
+        }
         const mergedEvents = mergeRecords(events, remote.events);
         const mergedTimelines = mergeRecords(timelines, remote.timelines);
         // 时间线去重，确保至少一条默认
